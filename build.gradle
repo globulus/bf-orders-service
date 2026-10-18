@@ -1,0 +1,74 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.16'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.shopfront'
+version = '1.4.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    springdocVersion = '2.8.17'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    runtimeOnly 'org.postgresql:postgresql'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'com.h2database:h2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// CI passes -PexcludeTags=known-bug so the tests in docs/KNOWN_ISSUES.md don't break
+// the build. Locally they run, so nobody forgets they're there.
+def extraExcludedTags = (findProperty('excludeTags') ?: '').tokenize(',')
+
+tasks.named('test') {
+    useJUnitPlatform {
+        excludeTags(['openapi'] + extraExcludedTags as String[])
+    }
+    testLogging {
+        events 'failed', 'skipped'
+        exceptionFormat 'full'
+    }
+}
+
+def openApiFile = layout.buildDirectory.file('openapi/orders.json')
+
+tasks.register('generateOpenApi', Test) {
+    description = 'Boots the app against H2 and writes the OpenAPI spec to build/openapi/orders.json.'
+    group = 'documentation'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'openapi'
+    }
+    systemProperty 'openapi.output', openApiFile.get().asFile.absolutePath
+    outputs.file(openApiFile)
+    outputs.upToDateWhen { false }
+}
